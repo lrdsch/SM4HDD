@@ -1,4 +1,4 @@
-setwd("/Users/leonardo/Desktop/swarm")
+setwd("/Users/leonardo/Desktop/SM4HDD")
 rm(list=ls())
 
 # 1) PACKAGES INSTALLATION AND LIBRARIES LOADING 
@@ -48,6 +48,11 @@ if (!require(gglasso)) {
   install.packages("gglasso")
 }
 
+if (!requireNamespace("sparseSVM", quietly = TRUE)) {
+  install.packages("sparseSVM")
+}
+
+
 # Load required libraries
 library(ggplot2)
 library(maps)
@@ -61,6 +66,7 @@ library(glmnet)
 library(Matrix)
 library(GGally)
 library(gglasso)
+library(sparseSVM)
 
 # 1) LOADING DATA
 data <- read.csv("Data/Swarm_Behaviour.csv")
@@ -426,5 +432,56 @@ print(paste("Precision:", precision))
 # Recall
 recall <- conf_matrix[2, 2] / sum(conf_matrix[2, ])
 print(paste("Recall:", recall))
+
+## 7) Lasso regularization - Sparse SVM
+# Rename the datasets
+X_cv <- X_train_cv
+y_cv <- y_train_cv
+
+# Adjust type
+X_cv <- as.matrix(X_cv)
+y_cv <- as.vector(y_cv)
+
+lasso.svm <- sparseSVM(X_cv, y_cv)
+plot(lasso.svm, xvar="norm")
+plot(lasso.svm, xvar="lambda")
+
+# Fit Lasso Sparse SVM Model with Cross-Validation
+cv.svm <- cv.sparseSVM(X_cv, y_cv)
+
+# Extract the best lamda
+plot(cv.svm)
+cat("Lambda min:", cv.svm$lambda.min, "\n")
+
+# Refit the model with the optimal cost parameter
+final_svm_model <- sparseSVM(as.matrix(X_train),as.vector(y_train),lambda = cv.svm$lambda.min)
+
+# Predict on the test data
+svm_predictions <- as.vector(predict(final_svm_model, X = as.matrix(X_test)))
+
+# Mean Squared Error
+svm_mse <- mean((svm_predictions - y_test)^2)
+print(paste("Mean Squared Error on Test Set:", svm_mse))
+
+# Convert predictions to binary (e.g., using a threshold)
+threshold <- 0.5
+svm_binary_predictions <- ifelse(svm_predictions > threshold, 1, 0)
+
+# Calculate confusion matrix
+svm_conf_matrix <- table(svm_binary_predictions, y_test)
+print("Confusion Matrix:")
+print(svm_conf_matrix)
+
+# Calculate accuracy
+svm_accuracy <- sum(diag(svm_conf_matrix)) / sum(svm_conf_matrix)
+print(paste("Accuracy:", svm_accuracy))
+
+# Precision
+svm_precision <- svm_conf_matrix[2, 2] / sum(svm_conf_matrix[, 2])
+print(paste("Precision:", svm_precision))
+
+# Recall
+svm_recall <- svm_conf_matrix[2, 2] / sum(svm_conf_matrix[2, ])
+print(paste("Recall:", svm_recall))
 
 
