@@ -32,6 +32,10 @@ if (!require(caret)) {
   install.packages("caret") 
 }
 
+if (!require(lattice)) {
+  install.packages("lattice") 
+}
+
 if (!require(bestglm)) {
   install.packages("bestglm")
 }
@@ -52,6 +56,9 @@ if (!requireNamespace("sparseSVM", quietly = TRUE)) {
   install.packages("sparseSVM")
 }
 
+if (!require(genlasso)) {
+  install.packages("genlasso")
+}
 
 # Load required libraries
 library(ggplot2)
@@ -67,6 +74,7 @@ library(Matrix)
 library(GGally)
 library(gglasso)
 library(sparseSVM)
+library(genlasso)
 
 # 1) LOADING DATA
 data <- read.csv("Data/Swarm_Behaviour.csv")
@@ -484,4 +492,110 @@ print(paste("Precision:", svm_precision))
 svm_recall <- svm_conf_matrix[2, 2] / sum(svm_conf_matrix[2, ])
 print(paste("Recall:", svm_recall))
 
+# 8) Generalized Lasso
+# adjust type of X_train, ...
+X_train <- as.matrix(X_train)
+X_test <- as.matrix(X_test)
+y_train <- as.vector(y_train)
+y_test <- as.vector(y_train)
+X_train_cv <- as.matrix(X_train_cv)
+y_train_cv <- as.vector(y_train_cv)
 
+# define the matrix of weights
+D <- matrix(0, nrow = 2400-12, ncol = 2400)
+for (i in 1:(2400-12)) {
+  idx <- seq(i, 2400, by = 12)
+  D[i, idx] <- 1
+}
+
+# defining a first model in order to retain the lambdas used in the build in cross validation
+model_gen<-genlasso(y_train_cv, X_train_cv, D)
+summary(model_gen)
+
+# plot the model
+plot(model_gen)
+
+# Get the lambda values used during model training (we are going to use them for our cross validation by hand)
+lambda_values <- model_gen$lambda
+plot(lambda_values)
+
+# Perform a cross validation in order to find the best lambda
+set.seed(123)  # Set seed for reproducibility
+n.train <- nrow(X_train_cv)  # Number of training points
+n.folds <- 5  # Number of CV folds
+foldid <- sample(rep_len(seq.int(n.folds), n.train))  # Fold number for each training point
+
+# Initialize variables to store results
+best_lambda <- NULL
+best_mean_cv_loss <- Inf
+
+# Evaluate each lambda on each fold:
+for (lambda_index in seq_along(lambda_values)) {
+  mean_cv_loss <- 0
+  
+  # Iterate over folds for cross-validation
+  for (fold in 1:n.folds) {
+    fold_indices <- which(foldid == fold)
+    
+    # Fit the model on the training fold with the current lambda
+    fold_genlasso_fit <- genlasso(y = y_train_cv[-fold_indices],
+                                  X = X_train_cv[-fold_indices, ],
+                                  D = D)
+    
+    # Predict on the validation fold
+    fold_genlasso_preds <- predict(fold_genlasso_fit,
+                                   lambda = lambda_values[lambda_index],
+                                   Xnew = X_train_cv[fold_indices, ])$fit
+    
+    # Calculate mean squared error for this fold
+    fold_loss <- mean((fold_genlasso_preds - y_train_cv[fold_indices])^2)
+    mean_cv_loss <- mean_cv_loss + fold_loss
+  }
+  
+  mean_cv_loss <- mean_cv_loss / n.folds  # Calculate mean cross-validation loss for this lambda
+  
+  
+  # Check if this lambda has the smallest cross-validation loss
+  if (mean_cv_loss < best_mean_cv_loss) {
+    best_mean_cv_loss <- mean_cv_loss
+    best_lambda <- lambda_values[lambda_index]
+  }
+}
+
+# Print the best lambda and its mean cross-validation loss
+print(paste("Best Lambda:", best_lambda))
+print(paste("Mean Cross-Validation Loss:", best_mean_cv_loss))
+
+# Now we retrain the best model 
+model_gen_final <- genlasso(y_train, X_train, D, lambda = best_lambda)
+
+# plot the model
+plot(model_gen_final)
+
+# Predict on the test data
+genlasso_predictions <- as.vector(predict(model_gen_final, newdata = as.matrix(X_test)))
+
+# Mean Squared Error
+genlasso_mse <- mean((genlasso_predictions - y_test)^2)
+print(paste("Mean Squared Error on Test Set:", genlasso_mse))
+
+# Convert predictions to binary (e.g., using a threshold)
+threshold <- 0.5
+genlasso_binary_predictions <- ifelse(genlasso_predictions > threshold, 1, 0)
+
+# Calculate confusion matrix
+genlasso_conf_matrix <- table(genlasso_binary_predictions, y_test)
+print("Confusion Matrix:")
+print(genlasso_conf_matrix)
+
+# Calculate accuracy
+genlasso_accuracy <- sum(diag(genlasso_conf_matrix)) / sum(genlasso_conf_matrix)
+print(paste("Accuracy:", genlasso_accuracy))
+
+# Precision
+genlasso_precision <- genlasso_conf_matrix[2, 2] / sum(genlasso_conf_matrix[, 2])
+print(paste("Precision:", genlasso_precision))
+
+# Recall
+genlasso_recall <- genlasso_conf_matrix[2, 2] / sum(genlasso_conf_matrix[2, ])
+print(paste("Recall:", genlasso_recall))
