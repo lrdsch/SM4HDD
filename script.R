@@ -567,13 +567,13 @@ print(paste("Best Lambda:", best_lambda))
 print(paste("Mean Cross-Validation Loss:", best_mean_cv_loss))
 
 # Now we retrain the best model 
-model_gen_final <- genlasso(y_train, X_train, D, lambda = best_lambda)
+model_gen_final <- genlasso(y_train, X_train, D)
 
 # plot the model
 plot(model_gen_final)
 
 # Predict on the test data
-genlasso_predictions <- as.vector(predict(model_gen_final, newdata = as.matrix(X_test)))
+genlasso_predictions <- as.vector(predict(model_gen_final, newdata = as.matrix(X_test), lambda = best_lambda))
 
 # Mean Squared Error
 genlasso_mse <- mean((genlasso_predictions - y_test)^2)
