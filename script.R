@@ -497,7 +497,7 @@ print(paste("Recall:", svm_recall))
 X_train <- as.matrix(X_train)
 X_test <- as.matrix(X_test)
 y_train <- as.vector(y_train)
-y_test <- as.vector(y_train)
+y_test <- as.vector(y_test)
 X_train_cv <- as.matrix(X_train_cv)
 y_train_cv <- as.vector(y_train_cv)
 
@@ -509,7 +509,7 @@ for (i in 1:(2400-12)) {
 }
 
 # defining a first model in order to retain the lambdas used in the build in cross validation
-model_gen<-genlasso(y_train_cv, X_train_cv, D)
+model_gen <- genlasso(y_train_cv, X_train_cv, D) #change to model_gen
 summary(model_gen)
 
 # plot the model
@@ -573,7 +573,7 @@ model_gen_final <- genlasso(y_train, X_train, D)
 plot(model_gen_final)
 
 # Predict on the test data
-genlasso_predictions <- as.vector(predict(model_gen_final, newdata = as.matrix(X_test), lambda = best_lambda))
+genlasso_predictions <- as.vector(predict(model_gen_final, Xnew = as.matrix(X_test), lambda = best_lambda)$fit)
 
 # Mean Squared Error
 genlasso_mse <- mean((genlasso_predictions - y_test)^2)
